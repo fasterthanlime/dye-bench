@@ -50,24 +50,24 @@ App: class {
 	SDL glSetAttribute(SDL_GL_DOUBLEBUFFER, 1)
 	screen = SDL setMode(width, height, 0, SDL_OPENGL)
 
+	image = CairoImageSurface new("assets/block.png")
+	(imageWidth, imageHeight) = (image getWidth(), image getHeight())
+	"Loaded %dx%d image" printfln(imageWidth, imageHeight)
+
 	createCairoContext(4)
 	initGL()
 	reshape()
-
-	image = CairoImageSurface new("assets/block.png")
-	(imageWidth, imageHeight) = (image getWidth(), image getHeight())
-	"Loaded %dx%d image" printfln(image getWidth(), image getHeight())
     }
 
     createCairoContext: func (channels: Int) {
-	surfData = gc_malloc(channels * width * height * UChar size)
+	surfData = gc_malloc(channels * imageWidth * imageHeight * UChar size)
 	if (!surfData) {
 	    "create_cairo_context - Couldn't allocate buffer" println()
 	    exit(1)
 	}
 
 	cairoSurface = CairoImageSurface new(surfData, CairoFormat ARGB32,
-	    width, height, channels * width)
+	    imageWidth, imageHeight, channels * imageWidth)
 	if (cairoSurface status() != CairoStatus SUCCESS) {
 	    "create_cairo_context - Couldn't create surface" println()
 	    exit(1)
@@ -99,63 +99,19 @@ App: class {
 	gluOrtho2D(0, width, height, 0)
 
 	glClear(GL_COLOR_BUFFER_BIT)
-
-	glDeleteTextures(1, textureID&)
-	glGenTextures(1, textureID&)
-	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, textureID);
-	glTexImage2D(GL_TEXTURE_RECTANGLE_ARB,
-		      0,
-		      GL_RGBA,
-		      width,
-		      height,
-		      0,
-		      GL_BGRA,
-		      GL_UNSIGNED_BYTE,
-		      null)
-	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
     }
 
     render: func {
 	context setSourceRGB(0, 0, 0)
-	context rectangle(0, 0, width, height)
+	context rectangle(0, 0, imageWidth, imageHeight)
 	context paint()
-	draw()
+	cairoDraw()
 
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
 	glClear(GL_COLOR_BUFFER_BIT)
 
-	glPushMatrix()
-
-	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, textureID)
-	glTexImage2D(GL_TEXTURE_RECTANGLE_ARB,
-		     0,
-		     GL_RGBA,
-		     width,
-		     height,
-		     0,
-		     GL_BGRA,
-		     GL_UNSIGNED_BYTE,
-		     surfData)
-
-	glColor3f(1.0, 1.0, 1.0)
-	glBegin(GL_QUADS)
-
-	glTexCoord2f(0.0, 0.0)
-	glVertex2f(0.0, 0.0)
-
-	glTexCoord2f(width as Float, 0.0)
-	glVertex2f(width, 0.0)
-
-	glTexCoord2f(width as Float, height as Float)
-	glVertex2f(width, height)
-
-	glTexCoord2f(0.0, height as Float)
-	glVertex2f(0.0, height)
-
-	glEnd()
-
-	glPopMatrix()
+	glDraw()
 
 	SDL glSwapBuffers()
     }
@@ -184,9 +140,36 @@ App: class {
 	(height / image getHeight() / 0.5 + 1)
     }
 
-    draw: func {
+    cairoDraw: func {
+	context save()
+
+	context translate( imageWidth / 2,  imageHeight / 2)
+	context rotate(angle)
+	context translate(-imageWidth / 2, -imageHeight / 2)
+
+	context setSourceSurface(image, 0, 0)
+
+	context rectangle(0, 0, imageWidth, imageHeight)
+	context clip()
+	context paint()
+
+	context restore()
+
+	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, textureID)
+	glTexImage2D(GL_TEXTURE_RECTANGLE_ARB,
+		     0,
+		     GL_RGBA,
+		     imageWidth,
+		     imageHeight,
+		     0,
+		     GL_BGRA,
+		     GL_UNSIGNED_BYTE,
+		     surfData)
+    }
+
+    glDraw: func {
 	for (x in -1..numRectanglesX()) for (y in -1..numRectanglesY()) {
-	    drawRectangle(x, y)
+	    glDrawRectangle(x, y)
 	}
 
 	x = (x + 1) % (image getWidth() / 2)
@@ -196,24 +179,34 @@ App: class {
 	}
     }
 
-    drawRectangle: func (offsetX, offsetY: Int) {
-	context save()
+    glDrawRectangle: func (offsetX, offsetY: Int) {
+	glPushMatrix()
 
-	context scale(0.5, 0.5)
+	glTranslatef(x + offsetX * imageWidth * 0.5, y + offsetY * imageHeight * 0.5, 0)
+	glScalef(0.5, 0.5, 1.0)
 
-	context translate(x * 2 + offsetX * image getWidth(),
-		    	  y * 2 + offsetY * image getHeight())
+	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, textureID)
 
-	context translate( imageWidth / 2,  imageHeight / 2)
-	context rotate(angle)
-	context translate(-imageWidth / 2, -imageHeight / 2)
+	glColor3f(1.0, 1.0, 1.0)
+	glBegin(GL_QUADS)
 
-	context setSourceSurface(image, 0, 0)
-	context rectangle(0, 0, image getWidth(), image getHeight())
-	context paint()
+	glTexCoord2f(0.0, 0.0)
+	glVertex2f(0.0, 0.0)
 
-	context restore()
+	glTexCoord2f(imageWidth, 0.0)
+	glVertex2f(imageWidth, 0.0)
+
+	glTexCoord2f(imageWidth, imageHeight)
+	glVertex2f(imageWidth, imageHeight)
+
+	glTexCoord2f(0.0, imageHeight)
+	glVertex2f(0.0, imageHeight)
+
+	glEnd()
+
+	glPopMatrix()
     }
+
 
     quit: func {
 	SDL quit()
